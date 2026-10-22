@@ -1,0 +1,80 @@
+// =========================================================================
+// Tokyo Seed Courier — 15s 4K Anamorphic Hyperreal Test Film (24 fps)
+// Zero text overlays, zero watermarks, seamless optical transitions, full
+// 9-layer spatial foley + whispered dialogue + single final chime on black
+// =========================================================================
+
+set video name to "Tokyo Seed Courier"
+set frame rate to 24 fps
+set resolution to 3840 by 2160
+set total duration to 15 seconds
+
+// [0:00 - 0:03] EXT. RAIN-SLICKED TOKYO ALLEY - NIGHT (35mm Low-Angle Dolly)
+second 1:
+    keyframe 1:
+        set background to "tokyo alley night" from "assets/tokyo_shot1_alley_bg.jpg"
+        set background weather to rainy
+        set background time to night
+        set light color to cyan
+        set light brightness to 85 percent
+        place object "stray cat" at bottom left
+        move object "stray cat" to bottom right
+    keyframe 8:
+        place object "courier" from "assets/tokyo_shot1_courier_alley.png" at left
+        move object "courier" to center
+        camera tilt up speed slow
+    fill frames automatically
+end second 1
+
+// [0:03 - 0:07] MEDIUM CLOSE-UP - COURIER'S FACE (50mm Handheld + Rack Focus)
+second 2:
+    transition with wipe
+    keyframe 1:
+        set background to "tokyo courier closeup" from "assets/tokyo_courier_ref.png"
+        set background weather to rainy
+        set background blur to 6
+        camera shake intensity small
+    keyframe 9:
+        set background blur to 0
+        place object "emerald hologram map" at bottom right
+        add effect glow on object "emerald hologram map" color green level high
+    keyframe 15:
+        add effect glitch level low
+    keyframe 18:
+        narrate "Wrong block."
+    fill frames automatically
+end second 2
+
+// [0:07 - 0:11] WIDE TRACKING SHOT - ROOFTOP CHASE (24mm Lateral + Red Searchlight)
+second 3:
+    transition with slide
+    keyframe 1:
+        set background to "tokyo rooftop chase" from "assets/tokyo_shot3_rooftop_bg.jpg"
+        set background weather to stormy
+        camera pan right speed fast
+        place object "leaping courier" from "assets/tokyo_shot3_leap.png" at center
+        place object "security drone" at top left
+        move object "security drone" to top center
+        add effect lens flare level medium
+    keyframe 14:
+        place object "chrome seed case" from "assets/tokyo_shot3_ac_box.png" at center
+        add effect glow on object "chrome seed case" color blue level high
+    fill frames automatically
+end second 3
+
+// [0:11 - 0:15] EXTREME CLOSE-UP - THE SEED (Macro 120fps->24fps + Cut to Black)
+second 4:
+    transition with fade
+    keyframe 1:
+        set background to "glowing blue seed macro" from "assets/tokyo_shot4_macro_seed.png"
+        set camera zoom to extreme close up
+        set light color to blue
+        set light brightness to 95 percent
+        place object "seed light roots" at center
+        add effect glow on object "seed light roots" color cyan level high
+    keyframe 23:
+        cut
+    fill frames automatically
+end second 4
+
+play video

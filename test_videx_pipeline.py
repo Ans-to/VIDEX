@@ -12,6 +12,7 @@ from videx_engine import VidexVideoEngine
 from videx_lexer import SECTION_7_TEST_CODE
 from videx_mograph import draw_sdf_circle, ease_expo_snap, ease_linear, ease_spring
 from videx_parser import VidexParser
+from videx_tokyo_cinema import TokyoCinemaRenderer
 from videx_validator import VidexValidator
 
 
@@ -100,6 +101,27 @@ class TestVidexEndToEndPipeline(unittest.TestCase):
         segs = VidexVideoEngine().compile_segments(program, total_frames=312)
         self.assertEqual(len(segs), 4)
         self.assertEqual([s.transition_in for s in segs], [None, "slide", "wipe", "zoom in"])
+
+    def test_tokyo_seed_courier_4k_24fps_compilation_and_physics_beats(self) -> None:
+        script = Path(__file__).resolve().parent / "examples" / "tokyo_seed_courier.videx"
+        program = VidexParser().parse_source(script.read_text(encoding="utf-8"))
+        notes = VidexValidator().validate(program)
+        self.assertEqual(notes, [])
+        self.assertEqual((program.width, program.height), (3840, 2160))
+        self.assertEqual(program.fps, 24)
+        self.assertEqual(program.total_duration, 15.0)
+
+        renderer = TokyoCinemaRenderer(Path(__file__).resolve().parent / "assets")
+        # Verify progressive bioluminescent root crawl on dark glove from 11.1s -> 14.1s
+        f_early = renderer.render_shot4_macro_seed(11.15)
+        f_late = renderer.render_shot4_macro_seed(14.10)
+        glove_roi_early = float(f_early[380:650, 480:900].mean())
+        glove_roi_late = float(f_late[380:650, 480:900].mean())
+        self.assertGreater(glove_roi_late, glove_roi_early + 2.5)
+
+        # Verify clean hard cut to pure RGB(0, 0, 0) black on chime at frame 346+
+        black_frame = renderer.render_frame_1080p_anamorphic(348, fps=24)
+        self.assertEqual(int(black_frame.max()), 0)
 
     def test_validator_repairs_odd_resolution_clamps_frames_and_auto_places_objects(self) -> None:
         src = "\n".join(
