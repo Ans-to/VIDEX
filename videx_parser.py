@@ -3,15 +3,17 @@ VIDEX Programming Language — Parser (Stage 2)
 ==============================================
 
 Pipeline Stage 2:
-    VIDEX Source Code -> Lexer -> [PARSER] -> Interpreter / Video Engine -> MP4
+    VIDEX Source Code -> Lexer -> [PARSER] -> Validator -> Video Engine -> MP4
 
 Consumes the structured token stream produced by ``VidexLexer`` and constructs
-a typed Abstract Syntax Tree (AST) representing video metadata, timeline second
-blocks, manual frame / keyframe blocks, transitions, and visual/audio commands.
+a typed Abstract Syntax Tree (AST) supporting video headers, multi-second
+timelines, manual frames & keyframes, `repeat N times` loops, camera motion &
+shake, lighting, object transforms, typography, full visual post-FX, and audio.
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Sequence
 
@@ -27,7 +29,7 @@ from videx_lexer import Token, TokenType, VidexLexer
 class Command:
     """Single executable scene instruction inside a frame or keyframe."""
 
-    action: str  # e.g. "set_background", "place_object", "scale_object", ...
+    action: str
     params: dict[str, object] = field(default_factory=dict)
     line: int = 0
 
@@ -94,6 +96,7 @@ class VidexParser:
 
         current_second: SecondBlock | None = None
         current_frame: FrameBlock | None = None
+        pending_repeat: int = 1
 
         for stmt in lines:
             head = stmt[0]
@@ -107,15 +110,27 @@ class VidexParser:
             if words == ["end"]:
                 current_frame = None
                 current_second = None
+                pending_repeat = 1
                 continue
 
             # 2. `end second N`
             if len(stmt) >= 2 and words[0] == "end" and words[1] == "second":
                 current_frame = None
                 current_second = None
+                pending_repeat = 1
                 continue
 
-            # 3. `second N:`
+            # 3. `repeat N times[:]`
+            if (
+                len(stmt) >= 3
+                and words[0] == "repeat"
+                and stmt[1].type == TokenType.NUMBER
+                and "times" in words
+            ):
+                pending_repeat = max(1, int(float(stmt[1].value)))
+                continue
+
+            # 4. `second N:`
             if (
                 len(stmt) >= 3
                 and words[0] == "second"
@@ -126,9 +141,10 @@ class VidexParser:
                 current_second = SecondBlock(second_number=sec_num, line=head.line)
                 program.seconds.append(current_second)
                 current_frame = None
+                pending_repeat = 1
                 continue
 
-            # 4. `keyframe N:` or `frame N:`
+            # 5. `keyframe N:` or `frame N:`
             if (
                 len(stmt) >= 3
                 and words[0] in ("keyframe", "frame")
@@ -147,36 +163,37 @@ class VidexParser:
                 current_second.frames.append(current_frame)
                 continue
 
-            # 5. `fill frames automatically`
+            # 6. `fill frames automatically`
             if words[:2] == ["fill", "frames"]:
                 if current_second is not None:
                     current_second.auto_fill = True
                 continue
 
-            # 6. `transition with <type>`
+            # 7. `transition with <type>`
             if len(stmt) >= 3 and words[:2] == ["transition", "with"]:
                 trans_type = " ".join(words[2:])
                 if current_second is not None:
                     current_second.transition = trans_type
                 continue
 
-            # 7. Top-level video configuration commands (`set video name ...`, etc.)
+            # 8. Top-level video configuration commands (`set video name ...`, etc.)
             if self._try_parse_header_setting(stmt, program):
                 continue
 
-            # 8. Scene / object / text / light / camera / sound commands
+            # 9. Scene / object / text / light / camera / post-FX / sound commands
             cmd = self._parse_command(stmt)
+            copies = [deepcopy(cmd) for _ in range(pending_repeat)]
+            pending_repeat = 1
+
             if current_frame is not None:
-                current_frame.commands.append(cmd)
+                current_frame.commands.extend(copies)
             elif current_second is not None:
-                # Command directly inside `second N:` applies at frame 1
                 default_frame = FrameBlock(index=1, is_keyframe=True, line=head.line)
-                default_frame.commands.append(cmd)
+                default_frame.commands.extend(copies)
                 current_second.frames.append(default_frame)
                 current_frame = default_frame
             else:
-                # Single-line / blockless VIDEX scripts work automatically too!
-                program.global_commands.append(cmd)
+                program.global_commands.extend(copies)
 
         if not program.duration_explicit:
             program.total_duration = float(max(len(program.seconds), 1))
@@ -211,23 +228,19 @@ class VidexParser:
     def _try_parse_header_setting(stmt: Sequence[Token], program: VideoProgram) -> bool:
         words = [t.value for t in stmt]
 
-        # set video name to "..."
         if len(stmt) >= 5 and words[:4] == ["set", "video", "name", "to"]:
             program.name = stmt[4].value
             return True
 
-        # set frame rate to 26 [fps]
         if len(stmt) >= 5 and words[:4] == ["set", "frame", "rate", "to"]:
             program.fps = max(1, int(float(stmt[4].value)))
             return True
 
-        # set resolution to 1920 by 1080
         if len(stmt) >= 6 and words[:3] == ["set", "resolution", "to"] and words[4] == "by":
             program.width = int(float(stmt[3].value))
             program.height = int(float(stmt[5].value))
             return True
 
-        # set total duration to X [seconds]
         if len(stmt) >= 5 and words[:4] == ["set", "total", "duration", "to"]:
             program.total_duration = max(0.1, float(stmt[4].value))
             program.duration_explicit = True
@@ -262,6 +275,9 @@ class VidexParser:
         if len(stmt) >= 5 and words[:3] == ["set", "background", "season"] and words[3] == "to":
             return Command("set_background_season", {"season": stmt[4].value}, line=line)
 
+        if len(stmt) >= 5 and words[:3] == ["set", "background", "blur"] and words[3] == "to":
+            return Command("set_background_blur", {"blur": float(stmt[4].value)}, line=line)
+
         # Object commands
         if len(stmt) >= 3 and words[:2] == ["place", "object"]:
             name = stmt[2].value
@@ -280,6 +296,13 @@ class VidexParser:
                 {"name": name, "position": pos, "file": file_path},
                 line=line,
             )
+
+        if len(stmt) >= 3 and words[:2] == ["remove", "object"]:
+            return Command("remove_object", {"name": stmt[2].value}, line=line)
+
+        if len(stmt) >= 4 and words[:2] == ["flip", "object"]:
+            axis = stmt[3].value if len(stmt) >= 4 else "horizontally"
+            return Command("flip_object", {"name": stmt[2].value, "axis": axis}, line=line)
 
         if len(stmt) >= 5 and words[:2] == ["scale", "object"] and words[3] == "to":
             return Command(
@@ -343,6 +366,16 @@ class VidexParser:
                 line=line,
             )
 
+        if len(stmt) >= 2 and words[:2] == ["camera", "shake"]:
+            intensity = "medium"
+            if "intensity" in words:
+                i_idx = words.index("intensity")
+                if i_idx + 1 < len(stmt):
+                    intensity = stmt[i_idx + 1].value
+            elif len(stmt) >= 3:
+                intensity = stmt[2].value
+            return Command("camera_shake", {"intensity": intensity}, line=line)
+
         if len(stmt) >= 5 and words[:4] == ["set", "camera", "angle", "to"]:
             return Command("set_camera_angle", {"angle": stmt[4].value}, line=line)
 
@@ -368,13 +401,16 @@ class VidexParser:
         if len(stmt) >= 5 and words[:4] == ["set", "text", "size", "to"]:
             return Command("set_text_size", {"size": stmt[4].value}, line=line)
 
-        if len(stmt) >= 5 and words[:3] == ["fade", "text", "in"]:
+        if len(stmt) >= 5 and words[:4] == ["set", "text", "style", "to"]:
+            return Command("set_text_style", {"style": stmt[4].value}, line=line)
+
+        if len(stmt) >= 5 and words[:2] == ["fade", "text"] and words[2] in ("in", "out"):
             frames = 10
             if "over" in words:
                 o_idx = words.index("over")
                 if o_idx + 1 < len(stmt):
                     frames = int(float(stmt[o_idx + 1].value))
-            return Command("fade_text_in", {"frames": frames}, line=line)
+            return Command(f"fade_text_{words[2]}", {"frames": frames}, line=line)
 
         if len(stmt) >= 3 and words[:2] == ["add", "text"]:
             color = "white"
@@ -393,6 +429,7 @@ class VidexParser:
             effect_name = stmt[2].value
             target_obj = None
             color = "white"
+            level = 1.0
             if "object" in words:
                 o_idx = words.index("object")
                 if o_idx + 1 < len(stmt):
@@ -401,9 +438,19 @@ class VidexParser:
                 c_idx = words.index("color")
                 if c_idx + 1 < len(stmt):
                     color = stmt[c_idx + 1].value
+            if "level" in words:
+                l_idx = words.index("level")
+                if l_idx + 1 < len(stmt):
+                    raw_lvl = stmt[l_idx + 1].value
+                    level = {"low": 0.4, "medium": 0.75, "high": 1.0}.get(raw_lvl, 1.0)
             return Command(
                 "add_effect",
-                {"effect": effect_name, "object": target_obj, "color": color},
+                {
+                    "effect": effect_name,
+                    "object": target_obj,
+                    "color": color,
+                    "level": level,
+                },
                 line=line,
             )
 
@@ -411,7 +458,7 @@ class VidexParser:
         if len(stmt) >= 2 and words[0] == "narrate":
             return Command("narrate", {"text": stmt[1].value}, line=line)
 
-        if len(stmt) >= 4 and words[:3] == ["play", "sound", "from"]:
+        if len(stmt) >= 4 and words[0] == "play" and words[1] in ("sound", "music") and words[2] == "from":
             return Command("play_sound", {"file": stmt[3].value}, line=line)
 
         return Command("generic", {"tokens": [t.to_dict() for t in stmt]}, line=line)

@@ -1,9 +1,9 @@
 """
-VIDEX Compiler & Video Engine — End-to-End CLI Runner
-=====================================================
+VIDEX Compiler & Cinema Video Engine — End-to-End CLI Runner
+============================================================
 
-Executes the full VIDEX pipeline:
-    VIDEX Code -> Lexer -> Parser -> Interpreter -> Video Engine -> MP4 Output
+Executes the full 4-stage VIDEX pipeline:
+    VIDEX Code -> Lexer -> Parser -> Semantic Validator -> Cinema Engine -> MP4
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import time
 from videx_engine import VidexVideoEngine
 from videx_lexer import SECTION_7_TEST_CODE, VidexLexer, VidexLexerError
 from videx_parser import VidexParser, VidexParserError
+from videx_validator import VidexValidator
 
 
 def slugify_video_name(name: str) -> str:
@@ -28,8 +29,9 @@ def compile_and_render(
     *,
     output_path: str | Path | None = None,
     base_dir: Path | None = None,
+    show_hud: bool = False,
 ) -> dict[str, object]:
-    """Run Lexer -> Parser -> Video Engine on ``source`` and write an `.mp4`."""
+    """Run Lexer -> Parser -> Validator -> Cinema Video Engine and write `.mp4`."""
     t0 = time.perf_counter()
 
     # Stage 1: Lexer
@@ -40,15 +42,18 @@ def compile_and_render(
     parser = VidexParser()
     program = parser.parse(tokens)
 
-    # Destination path
+    # Stage 2.5: Semantic Validator & Auto-Healer
+    validator = VidexValidator()
+    diagnostics = validator.validate(program)
+
     if output_path is None:
         filename = f"{slugify_video_name(program.name)}.mp4"
         dest = Path("output") / filename
     else:
         dest = Path(output_path)
 
-    # Stage 3 & 4: Interpreter + Video Engine
-    engine = VidexVideoEngine(base_dir=base_dir or Path.cwd())
+    # Stage 3 & 4: Interpreter + Cinema Video Engine
+    engine = VidexVideoEngine(base_dir=base_dir or Path.cwd(), show_hud=show_hud)
     rendered_path = engine.render(program, dest)
     elapsed = time.perf_counter() - t0
 
@@ -56,6 +61,7 @@ def compile_and_render(
         "video_name": program.name,
         "tokens_count": len(tokens),
         "seconds_blocks": len(program.seconds),
+        "diagnostics": [str(d) for d in diagnostics],
         "resolution": f"{program.width}x{program.height}",
         "fps": program.fps,
         "duration_seconds": program.total_duration,
@@ -79,6 +85,11 @@ def main() -> None:
         default=None,
         help="Output .mp4 path (defaults to output/<video_name>.mp4).",
     )
+    ap.add_argument(
+        "--hud",
+        action="store_true",
+        help="Burn frame-by-frame camera/timeline telemetry HUD overlay into output MP4.",
+    )
     args = ap.parse_args()
 
     if args.input_file:
@@ -90,22 +101,30 @@ def main() -> None:
         base_dir = Path.cwd()
 
     try:
-        summary = compile_and_render(source, output_path=args.output, base_dir=base_dir)
+        summary = compile_and_render(
+            source,
+            output_path=args.output,
+            base_dir=base_dir,
+            show_hud=args.hud,
+        )
     except (VidexLexerError, VidexParserError) as err:
         print(err)
         raise SystemExit(1) from err
 
-    print("═" * 62)
-    print("🎬 VIDEX PIPELINE COMPLETE")
-    print("═" * 62)
+    print("═" * 64)
+    print("🎬 VIDEX CINEMA PIPELINE COMPLETE")
+    print("═" * 64)
     print(f"  Video Title   : {summary['video_name']}")
     print(f"  Tokens Lexed  : {summary['tokens_count']}")
     print(f"  Scene Seconds : {summary['seconds_blocks']} scripted blocks")
+    print(f"  Diagnostics   : {len(summary['diagnostics'])} notes/warnings")
+    for note in summary["diagnostics"]:
+        print(f"                  {note}")
     print(f"  Resolution    : {summary['resolution']} @ {summary['fps']} fps")
     print(f"  Duration      : {summary['duration_seconds']}s ({summary['total_frames']} frames)")
     print(f"  Output MP4    : {summary['output_path']}")
     print(f"  Render Time   : {summary['render_time_sec']}s")
-    print("═" * 62)
+    print("═" * 64)
 
 
 if __name__ == "__main__":
