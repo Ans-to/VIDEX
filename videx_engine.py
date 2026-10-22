@@ -460,6 +460,8 @@ class StudioAssetBank:
         self.pad_w = int(round(width * 1.22))
         self.pad_h = int(round(height * 1.22))
         self.base_dir = base_dir
+        # `assets_dir` is kept for backwards compatibility but is never read:
+        # the studio synthesises all of its own imagery.
         self.assets_dir = Path(__file__).resolve().parent / "assets"
 
         self._scene_cache: dict[tuple[str, str | None], tuple[np.ndarray, np.ndarray]] = {}
@@ -513,6 +515,8 @@ class StudioAssetBank:
         if key in self._scene_cache:
             return self._scene_cache[key]
 
+        # Scenes are synthesised; only an explicitly user-supplied `file_path`
+        # in the .videx script would ever be loaded, never a bundled asset.
         rgb: np.ndarray | None = None
         if file_path:
             cand = Path(file_path) if Path(file_path).is_absolute() else (self.base_dir / file_path)
@@ -521,23 +525,12 @@ class StudioAssetBank:
 
         t_low = theme.lower()
         if rgb is None:
+            # 100% native synthesis: every pixel is computed by the VIDEX engine.
+            # No bundled photography, no downloaded plates, no external image assets.
             if "space" in t_low or "galaxy" in t_low or "star" in t_low:
-                plate = self.assets_dir / "space_galaxy.jpg"
-                if plate.is_file():
-                    rgb = self._load_image_rgb(plate, self.pad_w, self.pad_h)
-                    yy, xx = np.mgrid[0 : self.pad_h, 0 : self.pad_w].astype(np.float32)
-                    nu = (xx / self.pad_w) * 2.0 - 1.0
-                    nv = (yy / self.pad_h) * 2.0 - 1.0
-                    center_dim = 0.50 + 0.50 * np.clip((nu ** 2 + nv ** 2) * 0.95, 0.0, 1.0)
-                    rgb = rgb * center_dim[..., None]
-                else:
-                    rgb = self._procedural_space(self.pad_w, self.pad_h)
+                rgb = self._procedural_space(self.pad_w, self.pad_h)
             elif "mountain" in t_low or "himalaya" in t_low:
-                plate = self.assets_dir / "himalayas_sunrise.jpg"
-                if plate.is_file():
-                    rgb = self._load_image_rgb(plate, self.pad_w, self.pad_h)
-                else:
-                    rgb = self._procedural_mountains(self.pad_w, self.pad_h)
+                rgb = self._procedural_mountains(self.pad_w, self.pad_h)
             else:
                 rgb = self._procedural_scenic(self.pad_w, self.pad_h, t_low)
 
@@ -600,14 +593,24 @@ class StudioAssetBank:
         if self._earth_albedo is not None:
             return
         eh, ew = 720, 1440
-        eq_path = self.assets_dir / "earth_equirect.jpg"
-        if eq_path.is_file():
-            self._earth_albedo = self._load_image_rgb(eq_path, ew, eh)
-        else:
-            cont = _fbm_2d(eh, ew, base_grid=6, octaves=5, seed=512)
-            ocean = np.array([12.0, 52.0, 132.0], dtype=np.float32)
-            land = np.array([46.0, 128.0, 68.0], dtype=np.float32)
-            self._earth_albedo = np.where((cont > 0.51)[..., None], land, ocean)
+        # Native fractal-continent Earth albedo: pure math, zero source imagery.
+        cont = _fbm_2d(eh, ew, base_grid=6, octaves=6, seed=512)
+        shelf = _fbm_2d(eh, ew, base_grid=13, octaves=5, seed=613)
+        desert = _fbm_2d(eh, ew, base_grid=21, octaves=4, seed=717)
+        ocean = np.array([9.0, 46.0, 124.0], dtype=np.float32)
+        shallow = np.array([18.0, 96.0, 164.0], dtype=np.float32)
+        forest = np.array([34.0, 104.0, 58.0], dtype=np.float32)
+        steppe = np.array([126.0, 118.0, 74.0], dtype=np.float32)
+        ice = np.array([236.0, 242.0, 248.0], dtype=np.float32)
+        land_mask = (cont + 0.28 * (shelf - 0.5)) > 0.515
+        land = np.where((desert > 0.545)[..., None], steppe, forest)
+        albedo = np.where(land_mask[..., None], land, ocean)
+        coast = np.clip(1.0 - np.abs(cont - 0.515) * 22.0, 0.0, 1.0)[..., None]
+        albedo = albedo * (1.0 - coast * 0.55) + shallow * (coast * 0.55)
+        lat = np.abs(np.linspace(-1.0, 1.0, eh, dtype=np.float32))[:, None, None]
+        polar = np.clip((lat - 0.86) / 0.10, 0.0, 1.0)
+        albedo = albedo * (1.0 - polar) + ice * polar
+        self._earth_albedo = np.clip(albedo, 0.0, 255.0)
 
         self._earth_clouds = _periodic_cloud_map(eh, ew, seed=991)
 
@@ -747,19 +750,7 @@ class StudioAssetBank:
         glide into the golden sunrise distance (zero mechanical buzzing!).
         """
         if self._eagle_rgba is None:
-            eagle_path = self.assets_dir / "golden_eagle.png"
-            if eagle_path.is_file():
-                raw = np.asarray(Image.open(eagle_path).convert("RGB"), dtype=np.float32)
-                max_c = np.max(raw, axis=-1)
-                alpha = np.clip((max_c - 9.0) / 34.0, 0.0, 1.0) ** 0.72
-                alpha = cv2.GaussianBlur(alpha, (0, 0), sigmaX=0.8)
-                ys, xs = np.where(alpha > 0.04)
-                if len(xs) > 10 and len(ys) > 10:
-                    x0, x1 = max(0, int(xs.min()) - 12), min(raw.shape[1], int(xs.max()) + 12)
-                    y0, y1 = max(0, int(ys.min()) - 12), min(raw.shape[0], int(ys.max()) + 12)
-                    raw = raw[y0:y1, x0:x1]
-                    alpha = alpha[y0:y1, x0:x1]
-                self._eagle_rgba = np.dstack([raw, alpha * 255.0]).astype(np.float32)
+            self._eagle_rgba = self._synthesize_eagle_sprite()
 
         # Slow ~0.88 Hz wingbeat damping smoothly into serene thermal soaring glide
         glide_envelope = math.exp(-max(0.0, flight_age_s - 0.2) * 0.62)
@@ -850,6 +841,177 @@ class StudioAssetBank:
         return layer
 
     @staticmethod
+    def _synthesize_eagle_sprite() -> np.ndarray:
+        """
+        Native vector-feather golden-eagle synthesizer.
+
+        Builds a full-resolution raptor plate from pure geometry and math:
+        layered scapular covert feathers, individually shaped primary/secondary
+        flight feathers with barb striations, a fanned tail, hooked beak and
+        sun-side rim light. Zero photography, zero downloaded sprites.
+        """
+        w, h = 1280, 800
+        alpha = np.zeros((h, w), dtype=np.float32)
+        albedo = np.zeros((h, w, 3), dtype=np.float32)
+
+        cx, cy = w * 0.5, h * 0.50
+        deep = np.array([26.0, 20.0, 15.0], dtype=np.float32)
+        mid = np.array([58.0, 43.0, 30.0], dtype=np.float32)
+        warm = np.array([118.0, 86.0, 48.0], dtype=np.float32)
+        gold = np.array([188.0, 148.0, 86.0], dtype=np.float32)
+
+        def feather(root, tip, width_root, width_tip, bend, shade, a=1.0):
+            """Tapered, gently curved feather blade painted with anti-aliased coverage."""
+            rx, ry = root
+            tx, ty = tip
+            steps = 17
+            left, right = [], []
+            dx, dy = tx - rx, ty - ry
+            L = max((dx * dx + dy * dy) ** 0.5, 1e-6)
+            nx, ny = -dy / L, dx / L
+            for i in range(steps + 1):
+                u = i / steps
+                px = rx + dx * u + nx * bend * math.sin(u * math.pi)
+                py = ry + dy * u + ny * bend * math.sin(u * math.pi)
+                half = (width_root * (1.0 - u) + width_tip * u) * (1.0 - 0.42 * (u ** 4))
+                left.append((px + nx * half, py + ny * half))
+                right.append((px - nx * half, py - ny * half))
+            poly = np.array(left + right[::-1], dtype=np.int32)
+            cv2.fillPoly(alpha, [poly], float(a), lineType=cv2.LINE_AA)
+            cv2.fillPoly(albedo, [poly], shade.tolist(), lineType=cv2.LINE_AA)
+
+        # ---- Tail fan -------------------------------------------------------
+        for k in range(11):
+            t = (k - 5) / 5.0
+            feather(
+                (cx + t * 14, cy + 92),
+                (cx + t * 58, cy + 236 - abs(t) * 26),
+                17, 10, t * 9.0,
+                deep * (0.90 + 0.26 * (1.0 - abs(t))),
+            )
+
+        # ---- Wings ----------------------------------------------------------
+        for side in (-1.0, 1.0):
+            depth_gain = 1.0 if side > 0 else 0.78
+            # Continuous inner wing membrane kills any inter-feather gaps
+            membrane = np.array(
+                [
+                    (cx + side * 26, cy - 96),
+                    (cx + side * 190, cy - 96),
+                    (cx + side * 420, cy + 40),
+                    (cx + side * 300, cy + 86),
+                    (cx + side * 96, cy + 34),
+                ],
+                dtype=np.int32,
+            )
+            cv2.fillPoly(alpha, [membrane], 1.0, lineType=cv2.LINE_AA)
+            cv2.fillPoly(albedo, [membrane], (mid * 0.92 * depth_gain).tolist(), lineType=cv2.LINE_AA)
+
+            # Primaries: broad overlapping blades swept along a smooth trailing arc
+            for k in range(13):
+                t = k / 12.0
+                root = (cx + side * (52 + t * 214), cy - 74 + t * 62)
+                tip = (
+                    cx + side * (238 + t * 356),
+                    cy - 108 + t * 186,
+                )
+                shade = deep * (0.82 + 0.34 * t) * depth_gain
+                feather(root, tip, 30.0 - 8 * t, 9.0, side * (12.0 + 6 * t), shade, 0.995)
+            # Secondaries: short dense feathers forming the inner trailing edge
+            for k in range(9):
+                t = k / 8.0
+                root = (cx + side * (40 + t * 168), cy - 52 + t * 54)
+                tip = (cx + side * (150 + t * 232), cy + 62 + t * 62)
+                feather(root, tip, 34.0 - 6 * t, 11.0, side * 7.0, mid * (0.86 + 0.26 * t) * depth_gain, 0.995)
+            # Coverts: golden scapular feathers along the leading edge
+            for k in range(8):
+                t = k / 7.0
+                root = (cx + side * (14 + t * 116), cy - 98 + t * 38)
+                tip = (cx + side * (104 + t * 168), cy - 62 + t * 68)
+                feather(root, tip, 18.0, 6.0, side * 4.0, warm * (0.74 + 0.32 * (1.0 - t)) * depth_gain, 1.0)
+
+        # ---- Torso / breast -------------------------------------------------
+        torso = np.array(
+            [
+                (cx - 40, cy - 104),
+                (cx + 40, cy - 104),
+                (cx + 70, cy - 16),
+                (cx + 44, cy + 78),
+                (cx, cy + 104),
+                (cx - 44, cy + 78),
+                (cx - 70, cy - 16),
+            ],
+            dtype=np.int32,
+        )
+        cv2.fillPoly(alpha, [torso], 1.0, lineType=cv2.LINE_AA)
+        cv2.fillPoly(albedo, [torso], mid.tolist(), lineType=cv2.LINE_AA)
+        # Breast feather rows catch the warm sunrise on the sun side
+        for row in range(6):
+            v = cy - 84 + row * 30
+            for col in range(-3, 4):
+                if side_lit := (col >= 0):
+                    shade = warm * (0.52 + 0.30 * (1.0 - abs(col) / 3.5)) * (0.9 + 0.05 * row)
+                    cv2.ellipse(
+                        alpha, (int(cx + col * 17), int(v)), (11, 15), 0,
+                        0, 360, 1.0, -1, lineType=cv2.LINE_AA,
+                    )
+                    cv2.ellipse(
+                        albedo, (int(cx + col * 17), int(v)), (11, 15), 0,
+                        0, 360, shade.tolist(), -1, lineType=cv2.LINE_AA,
+                    )
+
+        # ---- Head + hooked beak --------------------------------------------
+        head_c = (int(cx), int(cy - 128))
+        cv2.ellipse(alpha, head_c, (30, 26), -6, 0, 360, 1.0, -1, lineType=cv2.LINE_AA)
+        cv2.ellipse(albedo, head_c, (30, 26), -6, 0, 360, gold.tolist(), -1, lineType=cv2.LINE_AA)
+        crown = np.array(
+            [
+                (cx - 28, cy - 136),
+                (cx + 24, cy - 142),
+                (cx + 30, cy - 152),
+                (cx - 18, cy - 158),
+            ],
+            dtype=np.int32,
+        )
+        cv2.fillPoly(alpha, [crown], 1.0, lineType=cv2.LINE_AA)
+        cv2.fillPoly(albedo, [crown], (gold * 0.82).tolist(), lineType=cv2.LINE_AA)
+        beak = np.array(
+            [
+                (cx - 12, cy - 124),
+                (cx + 12, cy - 127),
+                (cx + 7, cy - 99),
+                (cx - 1, cy - 86),
+                (cx - 8, cy - 100),
+            ],
+            dtype=np.int32,
+        )
+        cv2.fillPoly(alpha, [beak], 1.0, lineType=cv2.LINE_AA)
+        cv2.fillPoly(albedo, [beak], np.array([206.0, 172.0, 88.0]).tolist(), lineType=cv2.LINE_AA)
+        eye = (int(cx - 14), int(cy - 132))
+        cv2.circle(albedo, eye, 4, (12.0, 10.0, 9.0), -1, lineType=cv2.LINE_AA)
+        cv2.circle(albedo, (eye[0] + 1, eye[1] - 1), 1, (250.0, 244.0, 226.0), -1, lineType=cv2.LINE_AA)
+
+        # ---- Feather barb micro-texture + sun-side rim light ----------------
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        barbs = _fbm_2d(h, w, base_grid=190, octaves=1, seed=5150)
+        streak = 0.5 + 0.5 * np.sin((xx * 0.9 + yy * 0.3) * 0.7 + barbs * 6.0)
+        albedo *= (0.88 + 0.20 * streak[..., None])
+
+        edge = np.clip(alpha - cv2.erode(alpha, np.ones((3, 3), np.uint8)), 0.0, 1.0)
+        sun_side = np.clip((xx - cx) / 260.0 + 0.35, 0.0, 1.0)
+        # Volumetric cross-wing shading: sun side lifts, shadow side falls off
+        wing_span = np.clip(np.abs(xx - cx) / 600.0, 0.0, 1.0)
+        shade_grad = 1.0 - 0.34 * wing_span * (1.0 - sun_side) + 0.10 * wing_span * sun_side
+        albedo *= shade_grad[..., None]
+        albedo += (edge * sun_side)[..., None] * np.array([112.0, 84.0, 46.0], dtype=np.float32)
+
+        alpha = cv2.GaussianBlur(alpha, (0, 0), sigmaX=0.7)
+        out = np.zeros((h, w, 4), dtype=np.float32)
+        out[..., :3] = np.clip(albedo, 0.0, 255.0)
+        out[..., 3] = np.clip(alpha, 0.0, 1.0) * 255.0
+        return out
+
+    @staticmethod
     def _procedural_space(w: int, h: int) -> np.ndarray:
         yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
         nx, ny = (xx / w) * 2.0 - 1.0, (yy / h) * 2.0 - 1.0
@@ -861,11 +1023,62 @@ class StudioAssetBank:
 
     @staticmethod
     def _procedural_mountains(w: int, h: int) -> np.ndarray:
-        yy, _ = np.mgrid[0:h, 0:w].astype(np.float32)
-        v = (yy / max(h - 1, 1))[..., None]
-        top = np.array([28.0, 52.0, 108.0], dtype=np.float32)
-        bot = np.array([245.0, 186.0, 118.0], dtype=np.float32)
-        return np.clip(top * (1.0 - v) + bot * v, 0.0, 255.0)
+        """Pure mathematical multi-ridge snow-capped Himalayan sunrise synthesizer."""
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        u = xx / max(w - 1, 1)
+        v = yy / max(h - 1, 1)
+
+        # Golden sunrise sky gradient + radial solar corona at `(u=0.365, v=0.285)`
+        top = np.array([20.0, 46.0, 92.0], dtype=np.float32)
+        mid = np.array([196.0, 146.0, 96.0], dtype=np.float32)
+        horizon = np.array([255.0, 214.0, 145.0], dtype=np.float32)
+        t_sky = np.clip(v / 0.52, 0.0, 1.0)[..., None]
+        sky = top * (1.0 - t_sky) + mid * t_sky
+        sun_d2 = ((u - 0.365) * 1.65) ** 2 + (v - 0.285) ** 2
+        sky += np.exp(-sun_d2 / 0.045)[..., None] * (horizon - mid) * 1.15
+        canvas = np.clip(sky, 0.0, 255.0)
+
+        detail_tex = _fbm_2d(h, w, base_grid=26, octaves=5, seed=717)
+        strata = _fbm_2d(h, w, base_grid=64, octaves=3, seed=919)
+
+        # 4 layered 3D mountain ridges from distant atmospheric blue to foreground snow peaks
+        layers = [
+            (0.36, 0.13, 3.1, 0.62, (96.0, 118.0, 158.0), (242.0, 224.0, 198.0)),
+            (0.42, 0.19, 4.7, 0.48, (54.0, 74.0, 114.0), (252.0, 216.0, 162.0)),
+            (0.49, 0.23, 6.3, 0.34, (32.0, 48.0, 82.0), (255.0, 232.0, 196.0)),
+            (0.68, 0.16, 8.9, 0.18, (18.0, 28.0, 48.0), (218.0, 230.0, 245.0)),
+        ]
+        u_row = np.linspace(0.0, 1.0, w, dtype=np.float32)
+        for base_v, amp, freq, haze, shadow_col, lit_snow in layers:
+            prof = np.zeros(w, dtype=np.float32)
+            a_oct = 1.0
+            f_oct = freq
+            tot_a = 0.0
+            for oct_i in range(6):
+                raw_s = np.sin(u_row * f_oct * math.tau * 0.5 + oct_i * 1.9 + haze * 7.0)
+                ridged = 1.0 - np.abs(raw_s)
+                prof += a_oct * (ridged ** 1.45)
+                tot_a += a_oct
+                a_oct *= 0.52
+                f_oct *= 2.07
+            prof /= max(tot_a, 1e-5)
+            # Central Everest summit prominence around `u = 0.55`
+            summit = np.exp(-((u_row - 0.55) ** 2) / 0.032) * 0.42
+            ridge_v = (base_v - amp * (prof + summit))[None, :]
+
+            mask = v >= ridge_v
+            slope = np.gradient(ridge_v[0]) * w * 0.008
+            sun_lit = np.clip(-slope[None, :] * 2.4 + (detail_tex - 0.48) * 1.3, 0.0, 1.0)
+            alt_snow = np.clip(1.0 - (v - ridge_v) * 4.2 + (strata - 0.5) * 0.55, 0.0, 1.0)
+            rock_col = np.array(shadow_col, dtype=np.float32)
+            snow_col = np.array(lit_snow, dtype=np.float32)
+            mix = np.clip(sun_lit * 0.68 + alt_snow * 0.52, 0.0, 1.0)[..., None]
+            layer_rgb = rock_col * (1.0 - mix) + snow_col * mix
+            haze_col = np.array([168.0, 178.0, 204.0], dtype=np.float32)
+            layer_rgb = layer_rgb * (1.0 - haze * 0.45) + haze_col * (haze * 0.45)
+            canvas = np.where(mask[..., None], layer_rgb, canvas)
+
+        return np.clip(canvas, 0.0, 255.0)
 
     @staticmethod
     def _procedural_scenic(w: int, h: int, theme: str) -> np.ndarray:
@@ -1275,9 +1488,11 @@ class VidexVideoEngine:
 
         scene_names = [s.background for s in segments]
         if is_tokyo_courier_program(program.name, scene_names) and not self.show_hud:
+            # Native software-rendered cinema branch: `videx_raytrace.py` SDF ray
+            # marching draws every pixel; no image assets are read at any point.
             return render_tokyo_courier_mp4(
                 output_path=out_path,
-                assets_dir=Path(__file__).resolve().parent / "assets",
+                assets_dir=None,
                 width=program.width,
                 height=program.height,
                 fps=fps,
