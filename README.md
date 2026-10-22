@@ -1,131 +1,53 @@
-# VIDEX — Video Generation Programming Language
+# VIDEX — Cinema Video Generation Programming Language
 
-**VIDEX** is a plain-English video generation programming language where source code compiles directly into rendered `1920x1080` MP4 video output at **26 frames per second** (`26 fps` VIDEX standard) with zero external authoring tools required.
+**VIDEX** is a plain-English video generation programming language where source code compiles directly into cinema-grade `1920x1080` MP4 video output at **26 frames per second** (`26 fps` VIDEX standard).
 
 ```text
-VIDEX Source Code ──▶ Lexer ──▶ Parser ──▶ Keyframe Interpreter ──▶ Video Engine ──▶ MP4 Video
+VIDEX Source Code ─▶ Lexer ─▶ Parser ─▶ Semantic Validator ─▶ 2.5D/3D Cinema Engine ─▶ MP4 Video
 ```
 
 ---
 
-## Core Language Philosophy
+## Architecture & Pipeline Stages
 
-- **Everything is a Frame** (`1 second = 26 frames` standard)
-- **Every Line is a Scene** — even a single line of VIDEX produces a playable `.mp4`
-- **Code IS the Script** — human-readable plain-English statements
-- **Smart Asset Resolution** — procedural generation by default, or direct file imports via `from "..."`
+| File | Stage | Responsibility |
+| --- | --- | --- |
+| [`videx_lexer.py`](videx_lexer.py) | **Stage 1 — Lexer** | Character-by-character scanner, greedy multi-word phrase grouper, context-aware classifier across all **20 VIDEX token types**, smart asset resolution, and fuzzy typo error suggestions (`VidexLexerError`). |
+| [`videx_parser.py`](videx_parser.py) | **Stage 2 — Parser** | Builds a structured `VideoProgram` AST supporting timelines, keyframes, manual frames, `repeat N times` loops, camera motion/shake, lighting, object transforms, typography, full visual post-FX, and audio. |
+| [`videx_validator.py`](videx_validator.py) | **Stage 2.5 — Validator** | Enforces H.264 `yuv420p` even-resolution constraints, clamps out-of-bounds frame indices, merges duplicate keyframes, and auto-instantiates implicitly referenced objects per VIDEX's self-healing philosophy. |
+| [`videx_engine.py`](videx_engine.py) | **Stages 3 & 4 — Cinema Engine** | Sub-pixel `float32` `cv2.remap` 2.5D depth-parallax camera, 5-layer ray-shaded 3D Planet Earth, non-rigid per-frame wing-beat mesh deformation, volumetric sun rays & valley mist, ACES filmic tone mapping, and stereo AAC audio synthesis. |
+| [`videx.py`](videx.py) | **CLI Driver** | End-to-end compiler & renderer with optional `--hud` frame-telemetry burn-in. |
+| [`assets/`](assets/) | **Studio Textures** | High-resolution seamless equirectangular Earth map, deep-field galaxy nebula, Himalayan sunrise plate, and isolated golden eagle sprite (with full procedural fallbacks when offline). |
+| [`examples/earth_from_space.videx`](examples/earth_from_space.videx) | **Example Script** | Complete `"Earth from Space"` multi-scene program. |
+| [`output/earth_from_space.mp4`](output/earth_from_space.mp4) | **Rendered Video** | `1920x1080 @ 26fps` H.264 + stereo AAC output (`260` frames, zero frozen frames). |
 
 ---
 
-## Project Structure
+## Per-Frame Cinema Engine Highlights
 
-| File | Role |
-| --- | --- |
-| [`videx_lexer.py`](videx_lexer.py) | **Stage 1 — Lexer**: Character-by-character scanner, phrase grouper, context-sensitive classifier across all 20 VIDEX token types, and typo-suggesting error handler (`VidexLexerError`). |
-| [`videx_parser.py`](videx_parser.py) | **Stage 2 — Parser**: Builds a structured `VideoProgram` AST (`SecondBlock`, `FrameBlock`, `Command`). |
-| [`videx_engine.py`](videx_engine.py) | **Stages 3 & 4 — Interpreter & Video Engine**: Keyframe tweening (`fill frames automatically`), procedural 1080p scene synthesis, stereo ambient soundtrack generation, and H.264/AAC `.mp4` encoding. |
-| [`videx.py`](videx.py) | **CLI Compiler & Renderer**: Compiles any `.videx` file directly into an `.mp4` video. |
-| [`examples/earth_from_space.videx`](examples/earth_from_space.videx) | Official `"Earth from Space"` multi-scene example script. |
-| [`output/earth_from_space.mp4`](output/earth_from_space.mp4) | Rendered `1920x1080 @ 26fps` H.264 + AAC output of `earth_from_space.videx`. |
-| [`test_videx_lexer.py`](test_videx_lexer.py) | Unit tests for all 20 token types, all 13 keyword categories, smart assets, compact units, and lexer errors. |
-| [`test_videx_pipeline.py`](test_videx_pipeline.py) | End-to-end integration tests for `Lexer -> Parser -> Video Engine -> MP4`. |
+1. **Sub-Pixel Floating-Point Camera & 2.5D Depth Parallax (`cv2.remap`)** — Eliminates 1px integer crop jitter; foreground mountain ridges shift faster than distant horizon peaks.
+2. **5-Layer 3D Planet Ray-Tracer** — Sub-pixel bilinear continents/oceans (`BORDER_WRAP`), ocean-masked Blinn-Phong solar glint, independent super-rotating 3D cloud deck casting surface shadows, night-side golden city lights, and dual-scale Rayleigh blue atmospheric rim bloom.
+3. **Non-Rigid Wing-Beat Deformation** — Per-frame sinusoidal parabolic feather warp, vertical body bob, trajectory banking angle, and soft blurred shadow.
+4. **Living Per-Frame Atmosphere** — Scintillating starfield in space; horizontally seamless advecting alpine mist, warm anamorphic solar flare, and wind-blown summit snow spindrift on mountain scenes.
+5. **ACES Filmic Color Science & Anti-Banding Dither** — Smooth highlight roll-off, time-of-day color grading, optical vignette, and 10-bit-style chroma dither.
 
 ---
 
 ## Quick Start
 
-### 1. Install Dependencies
-
 ```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-*(Note: `videx_lexer.py` uses only the Python standard library and runs with zero external dependencies.)*
-
-### 2. Run the VIDEX Lexer
-
-```bash
-# Tokenize the built-in "Earth from Space" example (309 tokens)
+# 1. Run the standalone VIDEX Lexer (zero external dependencies)
 python3 videx_lexer.py
 
-# Tokenize any custom .videx file
-python3 videx_lexer.py examples/earth_from_space.videx
-```
-
-Example token output:
-
-```js
-{
-  type: "KEYWORD",
-  value: "set",
-  line: 1,
-  position: 0
-}
-
-{
-  type: "KEYWORD",
-  value: "background",
-  line: 1,
-  position: 4
-}
-
-{
-  type: "KEYWORD",
-  value: "to",
-  line: 1,
-  position: 15
-}
-
-{
-  type: "VALUE",
-  value: "Himalayas mountain",
-  line: 1,
-  position: 18
-}
-```
-
-### 3. Compile & Render a Video (`.mp4`)
-
-```bash
+# 2. Compile & render a VIDEX program to 1080p MP4
 python3 videx.py examples/earth_from_space.videx -o output/earth_from_space.mp4
-```
 
-### 4. Run Automated Tests
+# 3. Render with live frame-by-frame camera/timeline telemetry HUD burned in
+python3 videx.py examples/earth_from_space.videx -o output/debug_hud.mp4 --hud
 
-```bash
+# 4. Run full automated test suite (12 unit + integration tests)
 python3 -m unittest discover -v
-```
-
----
-
-## Supported Token Types (All 20 Types)
-
-`KEYWORD` · `VALUE` · `NUMBER` · `UNIT` · `COLOR` · `POSITION` · `SIZE` · `DIRECTION` · `EFFECT` · `FILE` · `SPEED` · `ANGLE` · `TIME_OF_DAY` · `WEATHER` · `SEASON` · `SEPARATOR` · `COMMENT` · `NEWLINE` · `INDENT` · `EOF`
-
----
-
-## Example VIDEX Program
-
-```videx
-// Earth from Space - VIDEX Test File
-set video name to "Earth from Space"
-set frame rate to 26
-set resolution to 1920 by 1080
-set total duration to 10 seconds
-
-second 1:
-    keyframe 1:
-        set background to "space galaxy"
-        place object "earth" at center
-        scale object "earth" to large
-        set light color to cold
-        set light brightness to 60 percent
-
-    keyframe 26:
-        rotate object "earth" by 5 degrees
-        add effect glow to object "earth" color blue
-        camera pan left speed slow
-
-    fill frames automatically
-end second 1
 ```
