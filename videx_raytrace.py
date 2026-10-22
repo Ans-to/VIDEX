@@ -343,8 +343,8 @@ def _head_sdf_local(lx, ly, lz):
     d = op_smin(d, sd_ellipsoid(lx, ly, lz, -0.0840, 0.0020, -0.0120, 0.0095, 0.0240, 0.0155), 0.011)
     d = op_smin(d, sd_ellipsoid(lx, ly, lz, 0.0840, 0.0020, -0.0120, 0.0095, 0.0240, 0.0155), 0.011)
     # eye sockets
-    d = op_smax(d, -sd_ellipsoid(lx, ly, lz, -0.0295, 0.0185, 0.0870, 0.0202, 0.0094, 0.0145), 0.0045)
-    d = op_smax(d, -sd_ellipsoid(lx, ly, lz, 0.0295, 0.0185, 0.0870, 0.0202, 0.0094, 0.0145), 0.0045)
+    d = op_smax(d, -sd_ellipsoid(lx, ly, lz, -0.0295, 0.0185, 0.0880, 0.0212, 0.0118, 0.0150), 0.0045)
+    d = op_smax(d, -sd_ellipsoid(lx, ly, lz, 0.0295, 0.0185, 0.0880, 0.0212, 0.0118, 0.0150), 0.0045)
     return d
 
 
@@ -393,11 +393,11 @@ def map_head_world(px, py, pz, hx, hy, hz, yaw, pitch, detail):
             d = hair
             mat = M_HAIR
         # eyeballs sit back inside the almond openings
-        e = sd_sphere(lx, ly, lz, -0.0295, 0.0185, 0.0700, 0.0150)
+        e = sd_sphere(lx, ly, lz, -0.0295, 0.0185, 0.0688, 0.0165)
         if e < d:
             d = e
             mat = M_EYE
-        e = sd_sphere(lx, ly, lz, 0.0295, 0.0185, 0.0700, 0.0150)
+        e = sd_sphere(lx, ly, lz, 0.0295, 0.0185, 0.0688, 0.0165)
         if e < d:
             d = e
             mat = M_EYE
@@ -455,7 +455,7 @@ def _courier_sdf(px, py, pz, J):
 
     # ---------- torso: tapered chest ----------
     torso = sd_round_cone(px, py, pz, J[0], J[1] - 0.02, J[2], J[3], J[4] - 0.02, J[5], 0.130, 0.150)
-    torso = op_smin(torso, sd_ellipsoid(px, py, pz, J[3], J[4] + 0.01, J[5], 0.165, 0.120, 0.105), 0.06)
+    torso = op_smin(torso, sd_ellipsoid(px, py, pz, J[3], J[4] + 0.01, J[5], 0.150, 0.115, 0.098), 0.06)
     if torso < d:
         d = torso
         mat = M_FABRIC
@@ -469,15 +469,15 @@ def _courier_sdf(px, py, pz, J):
     belt = sd_round_cone(px, py, pz, J[3], J[1] + 0.02, J[2] + 0.004,
                          J[3], J[1] - 0.03, J[2] + 0.004, 0.196, 0.186)
     coat = op_smin(coat, sd_round_cone(px, py, pz, J[24], J[25] + 0.015, J[26],
-                                       J[30], J[31] + 0.015, J[32], 0.085, 0.085), 0.09)
+                                       J[30], J[31] + 0.015, J[32], 0.072, 0.072), 0.075)
     coat = op_smin(coat, sd_round_cone(px, py, pz, J[24], J[25], J[26], J[27], J[28], J[29], 0.080, 0.066), 0.05)
     coat = op_smin(coat, sd_round_cone(px, py, pz, J[30], J[31], J[32], J[33], J[34], J[35], 0.080, 0.066), 0.05)
     coat = op_smin(coat, sd_round_cone(px, py, pz, J[27], J[28], J[29], J[36], J[37], J[38], 0.066, 0.054), 0.04)
     coat = op_smin(coat, sd_round_cone(px, py, pz, J[33], J[34], J[35], J[39], J[40], J[41], 0.066, 0.054), 0.04)
     coat = op_smax(coat, -belt, 0.008)
     # pop-up collar: a short ring at the base of the neck, cut away at the front
-    collar = sd_round_cone(px, py, pz, J[9], J[10] - 0.135, J[11] - 0.010,
-                           J[9], J[10] - 0.075, J[11] - 0.010, 0.092, 0.074)
+    collar = sd_round_cone(px, py, pz, J[9], J[10] - 0.150, J[11] - 0.012,
+                           J[9], J[10] - 0.098, J[11] - 0.012, 0.078, 0.064)
     collar = op_smax(collar, -(sd_rbox(px, py, pz, J[9], J[10] - 0.10, J[11] + 0.60,
                                        6.0, 0.14, 0.55, 0.01)), 0.03)
     coat = op_smin(coat, collar, 0.05)
@@ -499,7 +499,7 @@ def _courier_sdf(px, py, pz, J):
         mat = M_LEATHER
 
     # ---------- neck + head ----------
-    neck = sd_round_cone(px, py, pz, J[6], J[7] - 0.02, J[8], J[9], J[10] - 0.085, J[11], 0.056, 0.048)
+    neck = sd_round_cone(px, py, pz, J[6], J[7] - 0.055, J[8], J[9], J[10] - 0.070, J[11], 0.062, 0.052)
     hr, hm = map_head_world(px, py, pz, J[9], J[10], J[11], J[42], J[43], J[46])
     if neck < hr:
         if neck < d:
@@ -962,12 +962,12 @@ def map_seed(px, py, pz, J, t, params):
             y1 = -0.010
             y2 = -0.041 - 0.006 * math.sin(fi * 1.7)
             y3 = -0.050 + 0.004 * math.cos(fi)
-            rt1 = sd_capsule(px, py, pz, b1x, y1, b1z, b2x, y2, b2z, 0.00085)
+            rt1 = sd_capsule(px, py, pz, b1x, y1, b1z, b2x, y2, b2z, 0.00125)
             if rt1 < d:
                 d = rt1
                 mat = M_ROOT
             if grow > 0.35:
-                rt2 = sd_capsule(px, py, pz, b2x, y2, b2z, b3x, y3, b3z, 0.00062)
+                rt2 = sd_capsule(px, py, pz, b2x, y2, b2z, b3x, y3, b3z, 0.00090)
                 if rt2 < d:
                     d = rt2
                     mat = M_ROOT
@@ -1655,9 +1655,9 @@ def _render_pixel(ox, oy, oz, dx, dy, dz, stage, J, t, params):
         rad = math.sqrt(px * px + pz * pz)
         fall = math.exp(-rad * 8.0)
         pulse = 0.55 + 0.45 * params[1]
-        lr += (0.020 + 0.16 * fall) * params[5] * pulse
-        lg += (0.090 + 0.60 * fall) * params[5] * pulse
-        lb += (0.240 + 1.10 * fall) * params[5] * pulse
+        lr += (0.080 + 0.55 * fall) * params[5] * pulse
+        lg += (0.330 + 1.70 * fall) * params[5] * pulse
+        lb += (0.700 + 2.70 * fall) * params[5] * pulse
 
     # eyes: a deliberate, art-directed iris (no blown-out chrome balls)
     if mat == M_EYE:
@@ -1670,25 +1670,25 @@ def _render_pixel(ox, oy, oz, dx, dy, dz, stage, J, t, params):
         side = -1.0 if lx < 0.0 else 1.0
         radial = math.sqrt((lx - side * 0.0295) ** 2 + (ly - 0.0185) ** 2)
         # sclera: cool off-white, gently shaded by the key direction
-        sclera = 0.052 + 0.026 * max(0.0, min(1.0, (lx * side + 0.01) * 8.0))
+        sclera = 0.105 + 0.055 * max(0.0, min(1.0, (lx * side + 0.01) * 8.0))
         lr, lg, lb = sclera * 1.02, sclera * 0.99, sclera * 0.96
-        if radial < 0.0140:
+        if radial < 0.0152:
             fibre = 0.5 + 0.5 * math.sin(math.atan2(ly - 0.0185, lx - side * 0.0295) * 26.0)
-            lr = 0.030 + 0.016 * fibre
-            lg = 0.021 + 0.011 * fibre
-            lb = 0.014 + 0.007 * fibre
+            lr = 0.058 + 0.034 * fibre
+            lg = 0.036 + 0.020 * fibre
+            lb = 0.019 + 0.010 * fibre
             # limbal ring darkens the iris edge
-            edge = smoothstep_local(0.0105, 0.0140, radial)
+            edge = smoothstep_local(0.0116, 0.0152, radial)
             lr *= (1.0 - 0.65 * edge)
             lg *= (1.0 - 0.65 * edge)
             lb *= (1.0 - 0.65 * edge)
-        if radial < 0.0056:
-            lr, lg, lb = 0.004, 0.0035, 0.0035
+        if radial < 0.0062:
+            lr, lg, lb = 0.010, 0.009, 0.009
         # single soft corneal catchlight, upper-left of the iris
-        hl = math.exp(-(((lx - side * 0.0346) ** 2 + (ly - 0.0250) ** 2) * 22000.0))
-        lr += hl * 0.30
-        lg += hl * 0.33
-        lb += hl * 0.36
+        hl = math.exp(-(((lx - side * 0.0330) ** 2 + (ly - 0.0268) ** 2) * 240000.0))
+        lr += hl * 0.85
+        lg += hl * 0.92
+        lb += hl * 1.00
     lr += er
     lg += eg
     lb += eb

@@ -259,9 +259,9 @@ def shot2(t: float, width: int, height: int):
     """3.0 – 7.0 s. Handheld MCU: lens droplets rack to the eyes, watch, holo."""
     u = (t - 3.0) / 4.0
     # camera pushes in 4 cm and drifts a touch to the right
-    eye = (0.10 - 0.03 * u, 1.612 + 0.012 * smoothstep(0.0, 1.0, u), 6.66 - 0.12 * u)
+    eye = (0.09 - 0.03 * u, 1.600 + 0.012 * smoothstep(0.0, 1.0, u), 6.95 - 0.12 * u)
     target = (0.0, 1.600, 8.02)
-    hfov = lerp(36.0, 31.0, ease_io(u))
+    hfov = lerp(33.0, 28.0, ease_io(u))
     sx, sy = shake(t, 0.0032, 4.0)
     cam = camera(eye, target, width, height, hfov, roll_deg=-0.8, jitter=(sx, sy))
 
@@ -379,7 +379,7 @@ SEED_LIGHTS = (
 )
 ROOF_LIGHTS = (
     (0.0, 7.0, 22.0, 0.48, 0.66, 1.00, 34.0),     # cold sky dome bounce
-    (7.5, 2.4, 22.0, 1.00, 0.32, 0.24, 22.0),     # warm city glow, screen-right
+    (7.5, 2.4, 22.0, 1.00, 0.40, 0.30, 9.0),      # warm city glow, screen-right
     (-7.0, 1.8, 18.0, 0.22, 0.52, 1.00, 14.0),    # cyan neon, screen-left
     (0.0, 2.2, 6.0, 0.30, 0.55, 1.00, 8.0),       # cool ambience near the camera
     (2.2, 3.4, 11.0, 1.00, 0.20, 0.16, 11.0),     # drone searchlight core
