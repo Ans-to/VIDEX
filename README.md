@@ -23,13 +23,14 @@ VIDEX Source Code ─▶ Lexer ─▶ Parser ─▶ Semantic Validator ─▶ 2.
 
 ---
 
-## Per-Frame Cinema Engine Highlights
+## Continuous Motion & Cinema Engine Architecture
 
-1. **Sub-Pixel Floating-Point Camera & 2.5D Depth Parallax (`cv2.remap`)** — Eliminates 1px integer crop jitter; foreground mountain ridges shift faster than distant horizon peaks.
-2. **5-Layer 3D Planet Ray-Tracer** — Sub-pixel bilinear continents/oceans (`BORDER_WRAP`), ocean-masked Blinn-Phong solar glint, independent super-rotating 3D cloud deck casting surface shadows, night-side golden city lights, and dual-scale Rayleigh blue atmospheric rim bloom.
-3. **Non-Rigid Wing-Beat Deformation** — Per-frame sinusoidal parabolic feather warp, vertical body bob, trajectory banking angle, and soft blurred shadow.
-4. **Living Per-Frame Atmosphere** — Scintillating starfield in space; horizontally seamless advecting alpine mist, warm anamorphic solar flare, and wind-blown summit snow spindrift on mountain scenes.
-5. **ACES Filmic Color Science & Anti-Banding Dither** — Smooth highlight roll-off, time-of-day color grading, optical vignette, and 10-bit-style chroma dither.
+1. **Continuous-Time $C^2$ Motion Compiler (`compile_segments`, `ScalarTrack`, `ObjectTrack`)** — Proportional act mapping spans the full declared video duration (`set total duration to ...`) without dead static tails. Consecutive `second` blocks on the same background merge automatically into one continuous shot. `place object` anchors the entry keyframe while `move object`, `rotate object`, `scale object`, `camera pan`, and `camera tilt` evaluate smooth quintic/hermite curves across time with zero boundary jumps or frozen frames.
+2. **Dual-Stream Linear-Light Overlapping Transitions (`_blend_transition_linear_light`)** — Scene transitions (`fade`, `wipe`, `slide`) render **both** the outgoing and incoming scenes live simultaneously across a ~1.5-second overlap window and blend in $\gamma = 2.2$ linear light with gentle push-zoom motion continuity.
+3. **Sub-Pixel Floating-Point Camera, Sprite Compositing & 2.5D Depth Parallax (`cv2.remap`)** — Eliminates 1px integer quantization jitter across backgrounds, sprites, and advecting valley mist.
+4. **5-Layer 3D Planet Ray-Tracer** — Sub-pixel bilinear continents/oceans (`BORDER_WRAP`), ocean-masked Blinn-Phong solar glint, independent super-rotating 3D cloud deck casting surface shadows, night-side golden city lights, and dual-scale Rayleigh blue atmospheric rim bloom.
+5. **Organic Aerodynamic Wing-Beat & Thermal Soar** — Smooth `0.88 Hz` power strokes that damp gracefully into an open-wing thermal glide across the summit ridge with sub-pixel banking and soft shadow.
+6. **ACES Filmic Color Science & Anti-Banding Dither** — Smooth highlight roll-off, fade-in/fade-out bookends, optical vignette, and 10-bit-style chroma dither.
 
 ---
 
