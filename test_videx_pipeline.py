@@ -1,4 +1,4 @@
-"""End-to-end tests covering VIDEX Lexer -> Parser -> Validator -> Continuous Cinema Engine."""
+"""End-to-end tests covering VIDEX Lexer -> Parser -> Validator -> Cinema & Motion Graphics Engines."""
 
 from pathlib import Path
 import tempfile
@@ -10,6 +10,7 @@ import numpy as np
 from videx import compile_and_render
 from videx_engine import VidexVideoEngine
 from videx_lexer import SECTION_7_TEST_CODE
+from videx_mograph import draw_sdf_circle, ease_expo_snap, ease_linear, ease_spring
 from videx_parser import VidexParser
 from videx_validator import VidexValidator
 
@@ -29,7 +30,7 @@ class TestVidexEndToEndPipeline(unittest.TestCase):
 
     def test_continuous_motion_and_smooth_overlapping_transitions(self) -> None:
         """
-        Mathematical continuity guard:
+        Mathematical continuity guard on live-action cinema scene:
         Verifies zero camera jumps, overlapping 40-frame scene dissolves, and
         unbroken >800px continuous eagle flight across Act 3.
         """
@@ -38,18 +39,15 @@ class TestVidexEndToEndPipeline(unittest.TestCase):
         engine = VidexVideoEngine()
         segments = engine.compile_segments(program, total_frames=260)
 
-        # Space segment + unified continuous Himalayas segment (acts 2 & 3 merged smoothly!)
         self.assertEqual(len(segments), 2)
         space_seg, mountain_seg = segments
 
-        # Verify long overlapping live dual-scene dissolve (>= 35 frames = ~1.4s+)
         self.assertGreaterEqual(mountain_seg.transition_frames, 35)
         self.assertGreaterEqual(
             space_seg.render_end,
             mountain_seg.render_start + mountain_seg.transition_frames,
         )
 
-        # Verify strict C^1/C^2 sub-pixel smoothness with ZERO jumps anywhere!
         for seg in segments:
             pans = [seg.sample(f, 26, 260).cam_pan_x for f in range(seg.render_start, seg.render_end + 1)]
             tilts = [seg.sample(f, 26, 260).cam_tilt_y for f in range(seg.render_start, seg.render_end + 1)]
@@ -58,7 +56,6 @@ class TestVidexEndToEndPipeline(unittest.TestCase):
             self.assertLess(max(abs(tilts[i + 1] - tilts[i]) for i in range(len(tilts) - 1)), 0.01)
             self.assertLess(max(abs(zooms[i + 1] - zooms[i]) for i in range(len(zooms) - 1)), 0.005)
 
-        # Verify eagle moves smoothly & monotonically across > 800 pixels on 1920px canvas!
         xs = [
             mountain_seg.sample(f, 26, 260).objects["eagle"].x * 1920.0
             for f in range(mountain_seg.render_start, mountain_seg.render_end + 1)
@@ -68,6 +65,41 @@ class TestVidexEndToEndPipeline(unittest.TestCase):
         self.assertGreater(xs[-1] - xs[0], 800.0)
         for i in range(len(xs) - 1):
             self.assertGreater(xs[i + 1], xs[i], f"Eagle froze or reversed at step {i}")
+
+    def test_mograph_physics_curves_and_quarter_pixel_sdf_precision(self) -> None:
+        """
+        Verifies spring harmonic overshoot, expo snap boundary exactness, and
+        true 0.25-pixel sub-pixel SDF anti-aliasing without integer snapping.
+        """
+        self.assertAlmostEqual(ease_linear(0.5), 0.5, places=6)
+        self.assertEqual(ease_expo_snap(0.0), 0.0)
+        self.assertEqual(ease_expo_snap(1.0), 1.0)
+        self.assertGreater(ease_expo_snap(0.25), 0.75)
+
+        spring_samples = [ease_spring(i / 200.0) for i in range(201)]
+        self.assertGreater(max(spring_samples), 1.04)  # Genuine underdamped spring overshoot
+        self.assertAlmostEqual(spring_samples[-1], 1.0, places=5)
+
+        # Prove moving 0.25 sub-pixels produces smooth anti-aliased change (NOT frozen integer snap!)
+        c0 = np.zeros((96, 96, 3), dtype=np.float32)
+        c1 = np.zeros((96, 96, 3), dtype=np.float32)
+        draw_sdf_circle(c0, 48.00, 48.00, 20.0, (56.0, 189.0, 248.0))
+        draw_sdf_circle(c1, 48.25, 48.00, 20.0, (56.0, 189.0, 248.0))
+        subpx_delta = float(np.abs(c1 - c0).mean())
+        self.assertGreater(subpx_delta, 0.02)
+
+    def test_motion_graphics_benchmark_script_compiles_cleanly(self) -> None:
+        mg_script = Path(__file__).resolve().parent / "examples" / "motion_graphics_test.videx"
+        program = VidexParser().parse_source(mg_script.read_text(encoding="utf-8"))
+        notes = VidexValidator().validate(program)
+        self.assertEqual(notes, [])
+        self.assertEqual(program.fps, 26)
+        self.assertEqual((program.width, program.height), (1920, 1080))
+        self.assertEqual(program.total_duration, 12.0)
+
+        segs = VidexVideoEngine().compile_segments(program, total_frames=312)
+        self.assertEqual(len(segs), 4)
+        self.assertEqual([s.transition_in for s in segs], [None, "slide", "wipe", "zoom in"])
 
     def test_validator_repairs_odd_resolution_clamps_frames_and_auto_places_objects(self) -> None:
         src = "\n".join(

@@ -15,11 +15,14 @@ VIDEX Source Code ─▶ Lexer ─▶ Parser ─▶ Semantic Validator ─▶ 2.
 | [`videx_lexer.py`](videx_lexer.py) | **Stage 1 — Lexer** | Character-by-character scanner, greedy multi-word phrase grouper, context-aware classifier across all **20 VIDEX token types**, smart asset resolution, and fuzzy typo error suggestions (`VidexLexerError`). |
 | [`videx_parser.py`](videx_parser.py) | **Stage 2 — Parser** | Builds a structured `VideoProgram` AST supporting timelines, keyframes, manual frames, `repeat N times` loops, camera motion/shake, lighting, object transforms, typography, full visual post-FX, and audio. |
 | [`videx_validator.py`](videx_validator.py) | **Stage 2.5 — Validator** | Enforces H.264 `yuv420p` even-resolution constraints, clamps out-of-bounds frame indices, merges duplicate keyframes, and auto-instantiates implicitly referenced objects per VIDEX's self-healing philosophy. |
-| [`videx_engine.py`](videx_engine.py) | **Stages 3 & 4 — Cinema Engine** | Sub-pixel `float32` `cv2.remap` 2.5D depth-parallax camera, 5-layer ray-shaded 3D Planet Earth, non-rigid per-frame wing-beat mesh deformation, volumetric sun rays & valley mist, ACES filmic tone mapping, and stereo AAC audio synthesis. |
+| [`videx_engine.py`](videx_engine.py) | **Stages 3 & 4 — Cinema Engine** | Continuous $C^2$ minimum-jerk timeline compiler, live dual-stream gamma-2.2 linear-light transitions, 2.5D depth parallax, 5-layer ray-shaded 3D Planet Earth, biomechanical wing-beat & thermal soar, ACES filmic grading, and AAC audio synthesis. |
+| [`videx_mograph.py`](videx_mograph.py) | **Stage 3B — Vector Motion Graphics** | Sub-pixel analytical Signed Distance Field (SDF) vector renderer, spring/expo physics curves, 180° multi-subframe shutter motion blur, trim-path arcs, masked kinetic typography, whip-pan / 3-ribbon wipe / portal transitions, and 120-BPM audio-visual sync (`13.0` frames/beat @ `26 fps`). |
 | [`videx.py`](videx.py) | **CLI Driver** | End-to-end compiler & renderer with optional `--hud` frame-telemetry burn-in. |
 | [`assets/`](assets/) | **Studio Textures** | High-resolution seamless equirectangular Earth map, deep-field galaxy nebula, Himalayan sunrise plate, and isolated golden eagle sprite (with full procedural fallbacks when offline). |
-| [`examples/earth_from_space.videx`](examples/earth_from_space.videx) | **Example Script** | Complete `"Earth from Space"` multi-scene program. |
-| [`output/earth_from_space.mp4`](output/earth_from_space.mp4) | **Rendered Video** | `1920x1080 @ 26fps` H.264 + stereo AAC output (`260` frames, zero frozen frames). |
+| [`examples/earth_from_space.videx`](examples/earth_from_space.videx) | **Cinema Example** | Complete `"Earth from Space"` multi-scene 3D/2.5D nature program. |
+| [`examples/motion_graphics_test.videx`](examples/motion_graphics_test.videx) | **Motion Graphics Suite** | 4-act `"VIDEX Motion Graphics Benchmark"` (`12.0s`, `312` frames @ `26 fps`) testing physics lanes, shutter blur, trim paths, staggered Bauhaus cascade, and audio-synced spectrum bars. |
+| [`output/motion_graphics_test.mp4`](output/motion_graphics_test.mp4) | **Rendered MoGraph MP4** | `1920x1080 @ 26fps` H.264 + 120-BPM stereo electronic score (`312` frames). |
+| [`output/earth_from_space.mp4`](output/earth_from_space.mp4) | **Rendered Cinema MP4** | `1920x1080 @ 26fps` H.264 + stereo AAC output (`260` frames, zero frozen frames). |
 
 ---
 

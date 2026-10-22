@@ -1,0 +1,74 @@
+// =========================================================================
+// VIDEX Motion Graphics Benchmark Suite (1920x1080 @ 26 fps — 12.0 Seconds)
+// Tests: Sub-Pixel SDF Vectors, 4-Lane Physics/Spring Comparison, 180-deg
+// Shutter Motion Blur, Trim-Path Arcs, Staggered Cascade, Masked Kinetic
+// Typography, Whip-Pan / 3-Ribbon Wipe / Portal Transitions & 120-BPM Sync
+// =========================================================================
+
+set video name to "VIDEX Motion Graphics Benchmark"
+set frame rate to 26 fps
+set resolution to 1920 by 1080
+set total duration to 12 seconds
+
+// ACT 1 (0.0s - 3.0s): Motion Physics & 180-deg Shutter Blur Lab
+second 1:
+    keyframe 1:
+        set background to "blueprint grid"
+        place object "physics lanes" at center
+        camera pan right speed slow
+        place text "MOTION PHYSICS LAB" at bottom center
+        set text color to white
+        set text size to 56
+        add text glow color cyan
+        fade text in over 14 frames
+    fill frames automatically
+end second 1
+
+// ACT 2 (3.0s - 6.0s): Whip-Pan Slide -> Trim Paths & Orbital Harmonics
+second 2:
+    transition with slide
+    keyframe 1:
+        set background to "neon cyber"
+        place object "orbital rig" at center
+        rotate object "orbital rig" by 90 degrees
+        camera pan left speed slow
+        place text "TRIM PATHS & ORBITS" at bottom center
+        set text color to cyan
+        set text size to 56
+        add text glow color purple
+        fade text in over 14 frames
+    fill frames automatically
+end second 2
+
+// ACT 3 (6.0s - 9.0s): 3-Ribbon Stinger Wipe -> Swiss Editorial Cascade
+second 3:
+    transition with wipe
+    keyframe 1:
+        set background to "editorial light"
+        place object "kinetic cascade" at center
+        camera pan right speed slow
+        place text "STAGGERED RHYTHM" at bottom center
+        set text color to black
+        set text size to 58
+        add text glow color red
+        fade text in over 14 frames
+    fill frames automatically
+end second 3
+
+// ACT 4 (9.0s - 12.0s): Circular Iris Portal -> 120-BPM Audio Spectrum Finale
+second 4:
+    transition with zoom in
+    keyframe 1:
+        set background to "obsidian stage"
+        place object "equalizer" at center
+        place text "VIDEX MOTION ENGINE" at bottom center
+        set text color to gold
+        set text size to 60
+        add text glow color cyan
+        fade text in over 14 frames
+    keyframe 12:
+        narrate "Sub-Pixel SDF Vectors  |  Spring Physics  |  120 BPM Audio Sync"
+    fill frames automatically
+end second 4
+
+play video

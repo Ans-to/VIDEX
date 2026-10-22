@@ -38,6 +38,15 @@ import imageio_ffmpeg
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from videx_mograph import (
+    MoGraphStudio,
+    blend_mograph_transition,
+    is_light_mograph_scene,
+    is_mograph_object,
+    is_mograph_scene,
+    render_kinetic_text_layer,
+    write_mograph_electronic_score,
+)
 from videx_parser import Command, SecondBlock, VideoProgram
 
 
@@ -228,6 +237,7 @@ class ObjectTrack:
     rotation: ScalarTrack = field(default_factory=lambda: ScalarTrack(0.0, flow_mode=True))
     opacity: ScalarTrack = field(default_factory=lambda: ScalarTrack(1.0))
     glow: ScalarTrack = field(default_factory=lambda: ScalarTrack(0.0))
+    color: tuple[int, int, int] = (56, 189, 248)
     glow_color: tuple[int, int, int] = (72, 168, 255)
     shadow: float = 0.0
     flip_h: bool = False
@@ -263,6 +273,7 @@ class ObjectState:
     rotation: float = 0.0
     opacity: float = 1.0
     glow: float = 0.0
+    color: tuple[int, int, int] = (56, 189, 248)
     glow_color: tuple[int, int, int] = (72, 168, 255)
     shadow: float = 0.0
     flip_h: bool = False
@@ -369,6 +380,7 @@ class SceneSegment:
                 rotation=otrack.rotation.evaluate(f),
                 opacity=otrack.opacity.evaluate(f) * entry_alpha,
                 glow=otrack.glow.evaluate(f),
+                color=otrack.color,
                 glow_color=otrack.glow_color,
                 shadow=otrack.shadow,
                 flip_h=otrack.flip_h,
@@ -454,6 +466,7 @@ class StudioAssetBank:
         self._earth_clouds: np.ndarray | None = None
         self._earth_cities: np.ndarray | None = None
         self._eagle_rgba: np.ndarray | None = None
+        self.mograph = MoGraphStudio(width, height)
 
         yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
         self._screen_x = xx
@@ -938,11 +951,13 @@ class VidexVideoEngine:
             if starts_new_segment:
                 bg_name = explicit_bg[0] if explicit_bg else (current_seg.background if current_seg else "space galaxy")
                 bg_file = explicit_bg[1] if explicit_bg else (current_seg.background_file if current_seg else None)
-                trans_len = (
-                    min(42, max(18, int(round(frames_per_block * 0.46))))
-                    if (current_seg is not None and block.transition is not None)
-                    else 0
-                )
+                if current_seg is not None and block.transition is not None:
+                    if is_mograph_scene(bg_name) or is_mograph_scene(current_seg.background):
+                        trans_len = max(14, min(20, int(round(frames_per_block * 0.24))))
+                    else:
+                        trans_len = min(42, max(18, int(round(frames_per_block * 0.46))))
+                else:
+                    trans_len = 0
                 current_seg = SceneSegment(
                     background=bg_name,
                     background_file=bg_file,
@@ -1054,17 +1069,21 @@ class VidexVideoEngine:
         elif act == "place_object":
             name = str(p["name"])
             ax, ay = anchor_normalized(str(p["position"]))
+            # If placed at the opening keyframe of a transitioned scene, seed right at
+            # `seg.render_start` so the incoming hero rig is already live inside the wipe/portal!
+            at_scene_open = abs(frame_pos - seg.nominal_start) < 1.5
+            appear_f = float(seg.render_start) if at_scene_open else frame_pos
             otrack = ObjectTrack(
                 name=name,
-                appear_frame=frame_pos,
+                appear_frame=appear_f,
                 file=str(p["file"]) if isinstance(p.get("file"), str) else None,
             )
-            otrack.x.add_point(frame_pos, ax)
-            otrack.y.add_point(frame_pos, ay)
-            otrack.scale.add_point(frame_pos, 1.0)
-            otrack.rotation.add_point(frame_pos, 0.0)
-            otrack.opacity.add_point(frame_pos, 1.0)
-            otrack.glow.add_point(frame_pos, 0.0)
+            otrack.x.add_point(appear_f, ax)
+            otrack.y.add_point(appear_f, ay)
+            otrack.scale.add_point(appear_f, 1.0)
+            otrack.rotation.add_point(appear_f, 0.0)
+            otrack.opacity.add_point(appear_f, 1.0)
+            otrack.glow.add_point(appear_f, 0.0)
             seg.objects[name] = otrack
 
         elif act == "remove_object":
@@ -1124,6 +1143,11 @@ class VidexVideoEngine:
                 ot.x.add_point(block_end, dest_x)
                 ot.y.add_point(0.5 * (frame_pos + block_end), max(0.06, 0.5 * (cur_y + dest_y) - 0.024))
                 ot.y.add_point(block_end, dest_y)
+
+        elif act == "set_object_color":
+            name = str(p["name"])
+            if name in seg.objects:
+                seg.objects[name].color = resolve_rgb(str(p["color"]))
 
         elif act == "set_object_opacity":
             name = str(p["name"])
@@ -1256,12 +1280,25 @@ class VidexVideoEngine:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             wav_path = Path(tmp_dir) / "soundtrack.wav"
-            self._write_cinematic_score(
-                wav_path=wav_path,
-                duration_sec=total_frames / fps,
-                fps=fps,
-                timeline=sampled_for_audio,
-            )
+            has_mograph = any(is_mograph_scene(seg.background) for seg in segments)
+            if has_mograph:
+                trans_times = [
+                    (seg.render_start + seg.transition_frames * 0.5) / max(fps, 1)
+                    for seg in segments[1:]
+                    if seg.transition_frames > 0
+                ]
+                write_mograph_electronic_score(
+                    wav_path=wav_path,
+                    duration_sec=total_frames / fps,
+                    transition_times_sec=trans_times,
+                )
+            else:
+                self._write_cinematic_score(
+                    wav_path=wav_path,
+                    duration_sec=total_frames / fps,
+                    fps=fps,
+                    timeline=sampled_for_audio,
+                )
 
             ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
             cmd = [
@@ -1361,9 +1398,14 @@ class VidexVideoEngine:
                     global_frame=global_frame,
                     total_frames=total_frames,
                 )
-                blended_rgb = self._blend_transition_linear_light(
-                    rgb_out, rgb_in, inc.transition_in or "fade", raw_alpha
-                )
+                if is_mograph_scene(st_out.background) or is_mograph_scene(st_in.background):
+                    blended_rgb = blend_mograph_transition(
+                        rgb_out, rgb_in, inc.transition_in or "slide", raw_alpha
+                    )
+                else:
+                    blended_rgb = self._blend_transition_linear_light(
+                        rgb_out, rgb_in, inc.transition_in or "fade", raw_alpha
+                    )
                 primary_state = st_in
                 break
 
@@ -1395,6 +1437,125 @@ class VidexVideoEngine:
 
         return blended_rgb
 
+    def _render_mograph_frame(
+        self,
+        *,
+        program: VideoProgram,
+        assets: StudioAssetBank,
+        state: SceneState,
+        global_frame: int,
+    ) -> np.ndarray:
+        """Pure sub-pixel analytical SDF vector motion-graphics frame renderer."""
+        w, h = program.width, program.height
+        fps = program.fps
+        time_s = global_frame / max(fps, 1)
+        mg = assets.mograph
+        light_stage = is_light_mograph_scene(state.background)
+
+        canvas = mg.render_stage_canvas(
+            theme=state.background,
+            global_frame=global_frame,
+            fps=fps,
+            cam_pan_x=state.cam_pan_x,
+            cam_tilt_y=state.cam_tilt_y,
+            cam_zoom=state.cam_zoom,
+        )
+
+        cam_px_shift = -state.cam_pan_x * (w * 0.025)
+        cam_py_shift = -state.cam_tilt_y * (h * 0.025)
+
+        for obj in state.objects.values():
+            if obj.opacity <= 0.005:
+                continue
+            fx_x = obj.x * w + cam_px_shift
+            fy_y = obj.y * h + cam_py_shift
+            low = obj.name.strip().lower()
+
+            if "physics lanes" in low:
+                mg.render_physics_lanes(
+                    canvas,
+                    local_age_s=obj.local_age_s,
+                    fps=fps,
+                    opacity=obj.opacity,
+                )
+            elif "orbital rig" in low:
+                mg.render_orbital_rig(
+                    canvas,
+                    cx=fx_x,
+                    cy=fy_y,
+                    scale=obj.scale,
+                    rotation_deg=obj.rotation,
+                    local_age_s=obj.local_age_s,
+                    global_time_s=time_s,
+                    opacity=obj.opacity,
+                )
+            elif "kinetic cascade" in low:
+                mg.render_kinetic_cascade(
+                    canvas,
+                    cx=fx_x,
+                    cy=fy_y,
+                    scale=obj.scale,
+                    local_age_s=obj.local_age_s,
+                    global_time_s=time_s,
+                    opacity=obj.opacity,
+                )
+            elif "equalizer" in low or "waveform" in low:
+                mg.render_audio_equalizer(
+                    canvas,
+                    cx=fx_x,
+                    cy=fy_y,
+                    scale=obj.scale,
+                    local_age_s=obj.local_age_s,
+                    global_time_s=time_s,
+                    opacity=obj.opacity,
+                )
+            else:
+                mg.render_atomic_vector_object(
+                    canvas,
+                    name=obj.name,
+                    cx=fx_x,
+                    cy=fy_y,
+                    vx_px=obj.vx * w,
+                    vy_px=obj.vy * h,
+                    scale=obj.scale,
+                    rotation_deg=obj.rotation,
+                    opacity=obj.opacity,
+                    color=obj.color,
+                    glow=max(obj.glow, 0.35),
+                )
+
+        frame_img = Image.fromarray(np.clip(canvas, 0.0, 255.0).astype(np.uint8), mode="RGB").convert("RGBA")
+
+        for tev, alpha, _ in state.texts:
+            if alpha > 0.008:
+                raw_prog = min(
+                    1.0,
+                    max(0.0, (global_frame - tev.start_frame + 1.0) / max(1.0, tev.fade_in_frames)),
+                )
+                render_kinetic_text_layer(
+                    frame_img,
+                    text=tev.content,
+                    cx=tev.x * w,
+                    cy=tev.y * h,
+                    font_px=int(round(tev.size * (h / 1080.0))),
+                    color=tev.color,
+                    progress=raw_prog * (alpha if tev.fade_out_frames > 0 else 1.0),
+                    light_stage=light_stage,
+                    accent_color=tev.glow_color if tev.glow > 0.01 else None,
+                )
+
+        if state.narration and state.narration_alpha > 0.015:
+            self._draw_narration_bar(
+                frame_img=frame_img,
+                narration=state.narration,
+                alpha=state.narration_alpha,
+            )
+
+        out_f32 = np.asarray(frame_img.convert("RGB"), dtype=np.float32)
+        # Subtle 0.35-LSB anti-banding chroma dither on smooth studio gradients
+        dither = np.random.default_rng(30000 + global_frame).uniform(-0.35, 0.35, size=(h, w, 1)).astype(np.float32)
+        return np.clip(out_f32 + dither, 0.0, 255.0).astype(np.uint8)
+
     def _render_single_frame(
         self,
         *,
@@ -1404,6 +1565,13 @@ class VidexVideoEngine:
         global_frame: int,
         total_frames: int,
     ) -> np.ndarray:
+        if is_mograph_scene(state.background):
+            return self._render_mograph_frame(
+                program=program,
+                assets=assets,
+                state=state,
+                global_frame=global_frame,
+            )
         w, h = program.width, program.height
         time_s = global_frame / max(program.fps, 1)
 
