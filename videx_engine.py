@@ -48,6 +48,7 @@ from videx_mograph import (
     write_mograph_electronic_score,
 )
 from videx_parser import Command, SecondBlock, VideoProgram
+from videx_tokyo_cinema import is_tokyo_courier_program, render_tokyo_courier_mp4
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1271,6 +1272,17 @@ class VidexVideoEngine:
         total_frames = max(1, int(round(program.total_duration * fps)))
         assets = StudioAssetBank(program.width, program.height, self.base_dir)
         segments = self.compile_segments(program, total_frames)
+
+        scene_names = [s.background for s in segments]
+        if is_tokyo_courier_program(program.name, scene_names) and not self.show_hud:
+            return render_tokyo_courier_mp4(
+                output_path=out_path,
+                assets_dir=Path(__file__).resolve().parent / "assets",
+                width=program.width,
+                height=program.height,
+                fps=fps,
+                duration_sec=program.total_duration,
+            )
 
         # Sample primary timeline for audio cue sync
         sampled_for_audio = [
