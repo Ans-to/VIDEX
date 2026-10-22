@@ -1,0 +1,63 @@
+// Earth from Space - VIDEX Test File
+set video name to "Earth from Space"
+set frame rate to 26
+set resolution to 1920 by 1080
+set total duration to 10 seconds
+
+second 1:
+    keyframe 1:
+        set background to "space galaxy"
+        place object "earth" at center
+        scale object "earth" to large
+        set light color to cold
+        set light brightness to 60 percent
+
+    keyframe 26:
+        rotate object "earth" by 5 degrees
+        add effect glow to object "earth" color blue
+        camera pan left speed slow
+
+    fill frames automatically
+end second 1
+
+second 2:
+    transition with fade
+
+    keyframe 1:
+        set background to "Himalayas mountain"
+        set background time to sunrise
+        set background weather to clear
+        set camera angle to drone view
+        set camera zoom to wide shot
+
+    keyframe 13:
+        camera tilt down speed slow
+        set light color to warm
+        set light brightness to 80 percent
+
+    keyframe 26:
+        place text "The Himalayas" at bottom center
+        set text color to white
+        set text size to 50
+        fade text in over 10 frames
+        add text glow color white
+
+    fill frames automatically
+end second 2
+
+second 3:
+    keyframe 1:
+        place object "eagle" at top left
+        move object "eagle" to top right by 500 pixels
+        add effect shadow to object "eagle"
+
+    keyframe 26:
+        scale object "eagle" to small
+        set object "eagle" opacity to 50 percent
+        narrate "Welcome to the roof of the world"
+
+    fill frames automatically
+end second 3
+
+play video
+end
