@@ -42,6 +42,39 @@ VIDEX Source Code ─▶ Lexer ─▶ Parser ─▶ Semantic Validator ─▶ 2.
 
 ---
 
+## 100% Native Rendering — No Image Assets At All
+
+The cinema pipeline does not contain, download or reference a single photograph,
+sprite, texture or AI-generated image. Everything you see is computed, pixel by
+pixel, by our own software renderer in this repository:
+
+| Layer | How it is made |
+| --- | --- |
+| Set geometry | Analytic signed distance fields (rounded boxes, capsules, round cones, ellipsoids, smin/smax blends) sampled by a `96`-step sphere-trace, normals from tetrahedral finite differences. |
+| The alley | Procedural facade shader (`_facade`) drives concrete panels, tiled walls, lit/shuttered windows with interior silhouettes, glass mullions, awnings, pipe runs, AC boxes, lanterns and neon kanji blades — all functions of wall coordinates, no maps. |
+| The courier | A `48`-float joint rig (pelvis → chest → neck → head, both arms with elbows and wrists, both legs with knees and ankles, chrome case) skinned by capsules/round-cones, plus a detailed procedural head: cranium, brow, cheekbones, tapered jaw, nose, lips, almond eye sockets, eyelids, lashes, iris fibres, pupils, wet corneal catchlights and swept hair. |
+| Light | Point/practical lights with inverse-square falloff, per-light soft shadow marches, ambient occlusion, wrap + subsurface approximation for skin, Blinn-Phong speculars, and fresnel environment reflections that carry the cyan/magenta neon into wet asphalt and chrome. |
+| Atmosphere | Single-scattering volumetric fog/steam integrated along every ray, plus screen-space rain, refractive lens droplets, searchlight cones and cold breath. |
+| The seed | Emissive translucent membrane with a hot core, fibrous veins, fresnel rim and hair-thin roots of light crawling over the leather glove. |
+| Lens & film | CoC depth of field driven by the renderer's own depth buffer, anamorphic horizontal streaks, bloom, lateral chromatic aberration, `24mm` barrel distortion, ACES filmic tone curve, teal-shadow/amber-highlight grade and temporal grain. |
+| Audio | `44.1 kHz` stereo synthesis: rain, city hum, watch beeps, coat swish, metal clang, drone whir, sub-bass heartbeat, whispered `"Wrong block."` and the final chime — all DSP, no samples. |
+
+**Renderer kernel:** [`videx_raytrace.py`](videx_raytrace.py) · **Shot director:** [`videx_native_film.py`](videx_native_film.py) · **Score:** [`videx_tokyo_cinema.py`](videx_tokyo_cinema.py)
+
+```bash
+# Native render (any aspect-correct resolution; 3840x2160 is the 4K master)
+python3 videx_native_film.py --out output/tokyo_seed_courier.mp4 --width 1920 --height 804
+
+# Preview stills only
+python3 videx_native_film.py --preview 8 --width 1280 --height 536
+```
+
+The test suite asserts that no `.png`/`.jpg`/`.webp` file exists in the repository
+and that the render modules never call `cv2.imread`, `Image.open`, `iio.imread`
+or any network fetch (`test_native_renderer_needs_no_image_assets_whatsoever`).
+
+---
+
 ## Quick Start
 
 ```bash
