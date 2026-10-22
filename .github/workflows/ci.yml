@@ -1,0 +1,30 @@
+name: VIDEX CI
+
+on:
+  push:
+    branches: ["main", "**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test-videx-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run VIDEX Lexer on Section 7 test suite
+        run: python videx_lexer.py
+
+      - name: Run full unit & end-to-end MP4 pipeline tests
+        run: python -m unittest discover -v
