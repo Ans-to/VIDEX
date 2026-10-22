@@ -333,6 +333,18 @@ class VidexParser:
         if (
             len(stmt) >= 6
             and words[:2] == ["set", "object"]
+            and words[3] == "color"
+            and words[4] == "to"
+        ):
+            return Command(
+                "set_object_color",
+                {"name": stmt[2].value, "color": stmt[5].value},
+                line=line,
+            )
+
+        if (
+            len(stmt) >= 6
+            and words[:2] == ["set", "object"]
             and words[3] == "opacity"
             and words[4] == "to"
         ):
